@@ -1,3 +1,10 @@
+This is a fork of Xmrig. And Compile by myself. Enjoy it.
+
+Donation: RHTymZJhGjcT6vjJzjSNjcM5qFKwwZkC1G
+
+
+
+
 # XMRig
 
 [![Github All Releases](https://img.shields.io/github/downloads/xmrig/xmrig/total.svg)](https://github.com/xmrig/xmrig/releases)

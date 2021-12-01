@@ -1,6 +1,6 @@
-This is a fork of Xmrig. And Compile by myself. Enjoy it.
+# This is a fork of Xmrig. And Compile by myself. Enjoy it.
 
-Donation: RHTymZJhGjcT6vjJzjSNjcM5qFKwwZkC1G
+# Donation: RHTymZJhGjcT6vjJzjSNjcM5qFKwwZkC1G
 
 
 

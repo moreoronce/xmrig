@@ -2,7 +2,7 @@
 
 This is a fork of Xmrig. And Compile by myself. Enjoy it with no dev fee. 
 
-* **[Download]（https://github.com/moreoronce/xmrig-0-dev-fee/releases）**
+* **[Download](https://github.com/moreoronce/xmrig-0-dev-fee/releases)**
 
 
 * **Donation RTM: RHTymZJhGjcT6vjJzjSNjcM5qFKwwZkC1G**

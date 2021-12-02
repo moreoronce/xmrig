@@ -1,6 +1,9 @@
-# This is a fork of Xmrig. And Compile by myself. Enjoy it.
+# About
 
-# Donation: RHTymZJhGjcT6vjJzjSNjcM5qFKwwZkC1G
+This is a fork of Xmrig. And Compile by myself. Enjoy it with no dev fee. Download link at realease page. 
+
+
+Donation RTM: RHTymZJhGjcT6vjJzjSNjcM5qFKwwZkC1G
 
 
 

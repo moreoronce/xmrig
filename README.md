@@ -1,15 +1,3 @@
-# About
-
-This is a fork of Xmrig. And Compile by myself. Enjoy it with no dev fee. 
-
-* **[Download](https://github.com/moreoronce/xmrig-0-dev-fee/releases)**
-
-
-* **Donation RTM: RHTymZJhGjcT6vjJzjSNjcM5qFKwwZkC1G**
-
-
-
-
 # XMRig
 
 [![Github All Releases](https://img.shields.io/github/downloads/xmrig/xmrig/total.svg)](https://github.com/xmrig/xmrig/releases)
@@ -19,7 +7,7 @@ This is a fork of Xmrig. And Compile by myself. Enjoy it with no dev fee.
 [![GitHub stars](https://img.shields.io/github/stars/xmrig/xmrig.svg)](https://github.com/xmrig/xmrig/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/xmrig/xmrig.svg)](https://github.com/xmrig/xmrig/network)
 
-XMRig is a high performance, open source, cross platform RandomX, KawPow, CryptoNight and AstroBWT unified CPU/GPU miner and [RandomX benchmark](https://xmrig.com/benchmark). Official binaries are available for Windows, Linux, macOS and FreeBSD.
+XMRig is a high performance, open source, cross platform RandomX, KawPow, CryptoNight, AstroBWT and [GhostRider](https://github.com/xmrig/xmrig/tree/master/src/crypto/ghostrider#readme) unified CPU/GPU miner and [RandomX benchmark](https://xmrig.com/benchmark). Official binaries are available for Windows, Linux, macOS and FreeBSD.
 
 ## Mining backends
 - **CPU** (x64/ARMv8)

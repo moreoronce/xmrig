@@ -65,6 +65,7 @@ const char *Pool::kAlgo                   = "algo";
 const char *Pool::kCoin                   = "coin";
 const char *Pool::kDaemon                 = "daemon";
 const char *Pool::kDaemonPollInterval     = "daemon-poll-interval";
+const char *Pool::kDaemonJobTimeout       = "daemon-job-timeout";
 const char *Pool::kDaemonZMQPort          = "daemon-zmq-port";
 const char *Pool::kEnabled                = "enabled";
 const char *Pool::kFingerprint            = "tls-fingerprint";
@@ -76,7 +77,6 @@ const char *Pool::kSelfSelect             = "self-select";
 const char *Pool::kSOCKS5                 = "socks5";
 const char *Pool::kSubmitToOrigin         = "submit-to-origin";
 const char *Pool::kTls                    = "tls";
-const char *Pool::kWSS                    = "wss";
 const char *Pool::kUrl                    = "url";
 const char *Pool::kUser                   = "user";
 const char *Pool::kSpendSecretKey         = "spend-secret-key";
@@ -89,12 +89,13 @@ const char *Pool::kNicehashHost           = "nicehash.com";
 xmrig::Pool::Pool(const char *url) :
     m_flags(1 << FLAG_ENABLED),
     m_pollInterval(kDefaultPollInterval),
+    m_jobTimeout(kDefaultJobTimeout),
     m_url(url)
 {
 }
 
 
-xmrig::Pool::Pool(const char *host, uint16_t port, const char *user, const char *password, const char* spendSecretKey, int keepAlive, bool nicehash, bool tls, bool wss, Mode mode) :
+xmrig::Pool::Pool(const char *host, uint16_t port, const char *user, const char *password, const char* spendSecretKey, int keepAlive, bool nicehash, bool tls, Mode mode) :
     m_keepAlive(keepAlive),
     m_mode(mode),
     m_flags(1 << FLAG_ENABLED),
@@ -102,17 +103,18 @@ xmrig::Pool::Pool(const char *host, uint16_t port, const char *user, const char 
     m_user(user),
     m_spendSecretKey(spendSecretKey),
     m_pollInterval(kDefaultPollInterval),
+    m_jobTimeout(kDefaultJobTimeout),
     m_url(host, port, tls)
 {
     m_flags.set(FLAG_NICEHASH, nicehash || strstr(host, kNicehashHost));
     m_flags.set(FLAG_TLS,      tls);
-    m_flags.set(FLAG_WSS,      wss);
 }
 
 
 xmrig::Pool::Pool(const rapidjson::Value &object) :
     m_flags(1 << FLAG_ENABLED),
     m_pollInterval(kDefaultPollInterval),
+    m_jobTimeout(kDefaultJobTimeout),
     m_url(Json::getString(object, kUrl))
 {
     if (!m_url.isValid()) {
@@ -125,6 +127,7 @@ xmrig::Pool::Pool(const rapidjson::Value &object) :
     m_rigId          = Json::getString(object, kRigId);
     m_fingerprint    = Json::getString(object, kFingerprint);
     m_pollInterval   = Json::getUint64(object, kDaemonPollInterval, kDefaultPollInterval);
+    m_jobTimeout     = Json::getUint64(object, kDaemonJobTimeout, kDefaultJobTimeout);
     m_algorithm      = Json::getString(object, kAlgo);
     m_coin           = Json::getString(object, kCoin);
     m_daemon         = Json::getString(object, kSelfSelect);
@@ -134,7 +137,6 @@ xmrig::Pool::Pool(const rapidjson::Value &object) :
     m_flags.set(FLAG_ENABLED,  Json::getBool(object, kEnabled, true));
     m_flags.set(FLAG_NICEHASH, Json::getBool(object, kNicehash) || m_url.host().contains(kNicehashHost));
     m_flags.set(FLAG_TLS,      Json::getBool(object, kTls) || m_url.isTLS());
-    m_flags.set(FLAG_WSS,      Json::getBool(object, kWSS) || m_url.isWSS());
 
     setKeepAlive(Json::getValue(object, kKeepalive));
 
@@ -210,6 +212,7 @@ bool xmrig::Pool::isEqual(const Pool &other) const
             && m_url          == other.m_url
             && m_user         == other.m_user
             && m_pollInterval == other.m_pollInterval
+            && m_jobTimeout   == other.m_jobTimeout
             && m_daemon       == other.m_daemon
             && m_proxy        == other.m_proxy
             );
@@ -296,13 +299,13 @@ rapidjson::Value xmrig::Pool::toJSON(rapidjson::Document &doc) const
 
     obj.AddMember(StringRef(kEnabled),      m_flags.test(FLAG_ENABLED), allocator);
     obj.AddMember(StringRef(kTls),          isTLS(), allocator);
-    obj.AddMember(StringRef(kWSS),          isWSS(), allocator);
     obj.AddMember(StringRef(kFingerprint),  m_fingerprint.toJSON(), allocator);
     obj.AddMember(StringRef(kDaemon),       m_mode == MODE_DAEMON, allocator);
     obj.AddMember(StringRef(kSOCKS5),       m_proxy.toJSON(doc), allocator);
 
     if (m_mode == MODE_DAEMON) {
         obj.AddMember(StringRef(kDaemonPollInterval), m_pollInterval, allocator);
+        obj.AddMember(StringRef(kDaemonJobTimeout), m_jobTimeout, allocator);
         obj.AddMember(StringRef(kDaemonZMQPort), m_zmqPort, allocator);
     }
     else {

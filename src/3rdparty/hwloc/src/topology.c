@@ -1,8 +1,9 @@
 /*
  * Copyright © 2009 CNRS
- * Copyright © 2009-2021 Inria.  All rights reserved.
+ * Copyright © 2009-2022 Inria.  All rights reserved.
  * Copyright © 2009-2012, 2020 Université Bordeaux
  * Copyright © 2009-2011 Cisco Systems, Inc.  All rights reserved.
+ * Copyright © 2022 IBM Corporation.  All rights reserved.
  * See COPYING in top-level directory.
  */
 
@@ -52,29 +53,41 @@
 #include <windows.h>
 #endif
 
+
+#ifdef HWLOC_HAVE_LEVELZERO
 /*
  * Define ZES_ENABLE_SYSMAN=1 early so that the LevelZero backend gets Sysman enabled.
+ *
+ * Only if the levelzero was enabled in this build so that we don't enable sysman
+ * for external levelzero users when hwloc doesn't need it. If somebody ever loads
+ * an external levelzero plugin in a hwloc library built without levelzero (unlikely),
+ * he may have to manually set ZES_ENABLE_SYSMAN=1.
+ *
  * Use the constructor if supported and/or the Windows DllMain callback.
  * Do it in the main hwloc library instead of the levelzero component because
  * the latter could be loaded later as a plugin.
  *
  * L0 seems to be using getenv() to check this variable on Windows
  * (at least in the Intel Compute-Runtime of March 2021),
- * so use putenv() to set the variable.
+ * but setenv() doesn't seem to exist on Windows, hence use putenv() to set the variable.
  *
  * For the record, Get/SetEnvironmentVariable() is not exactly the same as getenv/putenv():
  * - getenv() doesn't see what was set with SetEnvironmentVariable()
  * - GetEnvironmentVariable() doesn't see putenv() in cygwin (while it does in MSVC and MinGW).
  * Hence, if L0 ever switches from getenv() to GetEnvironmentVariable(),
  * it will break in cygwin, we'll have to use both putenv() and SetEnvironmentVariable().
- * Hopefully L0 will be provide a way to enable Sysman without env vars before it happens.
+ * Hopefully L0 will provide a way to enable Sysman without env vars before it happens.
  */
 #if HWLOC_HAVE_ATTRIBUTE_CONSTRUCTOR
 static void hwloc_constructor(void) __attribute__((constructor));
 static void hwloc_constructor(void)
 {
   if (!getenv("ZES_ENABLE_SYSMAN"))
-    putenv((char *) "ZES_ENABLE_SYSMAN=1");
+#ifdef HWLOC_WIN_SYS
+    putenv("ZES_ENABLE_SYSMAN=1");
+#else
+    setenv("ZES_ENABLE_SYSMAN", "1", 1);
+#endif
 }
 #endif
 #ifdef HWLOC_WIN_SYS
@@ -82,11 +95,14 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved)
 {
   if (fdwReason == DLL_PROCESS_ATTACH) {
     if (!getenv("ZES_ENABLE_SYSMAN"))
+      /* Windows does not have a setenv, so use putenv. */
       putenv((char *) "ZES_ENABLE_SYSMAN=1");
   }
   return TRUE;
 }
 #endif
+#endif /* HWLOC_HAVE_LEVELZERO */
+
 
 unsigned hwloc_get_api_version(void)
 {
@@ -98,14 +114,25 @@ int hwloc_topology_abi_check(hwloc_topology_t topology)
   return topology->topology_abi != HWLOC_TOPOLOGY_ABI ? -1 : 0;
 }
 
+/* callers should rather use wrappers HWLOC_SHOW_ALL_ERRORS() and HWLOC_SHOW_CRITICAL_ERRORS() for clarity */
 int hwloc_hide_errors(void)
 {
   static int hide = 1; /* only show critical errors by default. lstopo will show others */
   static int checked = 0;
   if (!checked) {
     const char *envvar = getenv("HWLOC_HIDE_ERRORS");
-    if (envvar)
+    if (envvar) {
       hide = atoi(envvar);
+#ifdef HWLOC_DEBUG
+    } else {
+      /* if debug is enabled and HWLOC_DEBUG_VERBOSE isn't forced to 0,
+       * show all errors jus like we show all debug messages.
+       */
+      envvar = getenv("HWLOC_DEBUG_VERBOSE");
+      if (!envvar || atoi(envvar))
+        hide = 0;
+#endif
+    }
     checked = 1;
   }
   return hide;
@@ -142,7 +169,7 @@ static void report_insert_error(hwloc_obj_t new, hwloc_obj_t old, const char *ms
 {
   static int reported = 0;
 
-  if (reason && !reported && hwloc_hide_errors() < 2) {
+  if (reason && !reported && HWLOC_SHOW_CRITICAL_ERRORS()) {
     char newstr[512];
     char oldstr[512];
     report_insert_error_format_obj(newstr, sizeof(newstr), new);
@@ -3162,7 +3189,7 @@ hwloc_connect_levels(hwloc_topology_t topology)
       tmpnbobjs = realloc(topology->level_nbobjects,
 			  2 * topology->nb_levels_allocated * sizeof(*topology->level_nbobjects));
       if (!tmplevels || !tmpnbobjs) {
-        if (hwloc_hide_errors() < 2)
+        if (HWLOC_SHOW_CRITICAL_ERRORS())
           fprintf(stderr, "hwloc: failed to realloc level arrays to %u\n", topology->nb_levels_allocated * 2);
 
 	/* if one realloc succeeded, make sure the caller will free the new buffer */
@@ -3520,6 +3547,8 @@ hwloc_discover(struct hwloc_topology *topology,
   /*
    * Additional discovery
    */
+  hwloc_pci_discovery_prepare(topology);
+
   if (topology->backend_phases & HWLOC_DISC_PHASE_PCI) {
     dstatus->phase = HWLOC_DISC_PHASE_PCI;
     hwloc_discover_by_phase(topology, dstatus, "PCI");
@@ -3537,6 +3566,8 @@ hwloc_discover(struct hwloc_topology *topology,
     hwloc_discover_by_phase(topology, dstatus, "ANNOTATE");
   }
 
+  hwloc_pci_discovery_exit(topology); /* pci needed up to annotate */
+
   if (getenv("HWLOC_DEBUG_SORT_CHILDREN"))
     hwloc_debug_sort_children(topology->levels[0][0]);
 
@@ -3549,17 +3580,17 @@ hwloc_discover(struct hwloc_topology *topology,
   hwloc_debug("%s", "\nRemoving empty objects\n");
   remove_empty(topology, &topology->levels[0][0]);
   if (!topology->levels[0][0]) {
-    if (hwloc_hide_errors() < 2)
+    if (HWLOC_SHOW_CRITICAL_ERRORS())
       fprintf(stderr, "hwloc: Topology became empty, aborting!\n");
     return -1;
   }
   if (hwloc_bitmap_iszero(topology->levels[0][0]->cpuset)) {
-    if (hwloc_hide_errors() < 2)
+    if (HWLOC_SHOW_CRITICAL_ERRORS())
       fprintf(stderr, "hwloc: Topology does not contain any PU, aborting!\n");
     return -1;
   }
   if (hwloc_bitmap_iszero(topology->levels[0][0]->nodeset)) {
-    if (hwloc_hide_errors() < 2)
+    if (HWLOC_SHOW_CRITICAL_ERRORS())
       fprintf(stderr, "hwloc: Topology does not contain any NUMA node, aborting!\n");
     return -1;
   }
@@ -3795,7 +3826,16 @@ hwloc_topology_set_flags (struct hwloc_topology *topology, unsigned long flags)
     return -1;
   }
 
-  if (flags & ~(HWLOC_TOPOLOGY_FLAG_INCLUDE_DISALLOWED|HWLOC_TOPOLOGY_FLAG_IS_THISSYSTEM|HWLOC_TOPOLOGY_FLAG_THISSYSTEM_ALLOWED_RESOURCES|HWLOC_TOPOLOGY_FLAG_IMPORT_SUPPORT|HWLOC_TOPOLOGY_FLAG_RESTRICT_TO_CPUBINDING|HWLOC_TOPOLOGY_FLAG_RESTRICT_TO_MEMBINDING|HWLOC_TOPOLOGY_FLAG_DONT_CHANGE_BINDING)) {
+  if (flags & ~(HWLOC_TOPOLOGY_FLAG_INCLUDE_DISALLOWED
+                |HWLOC_TOPOLOGY_FLAG_IS_THISSYSTEM
+                |HWLOC_TOPOLOGY_FLAG_THISSYSTEM_ALLOWED_RESOURCES
+                |HWLOC_TOPOLOGY_FLAG_IMPORT_SUPPORT
+                |HWLOC_TOPOLOGY_FLAG_RESTRICT_TO_CPUBINDING
+                |HWLOC_TOPOLOGY_FLAG_RESTRICT_TO_MEMBINDING
+                |HWLOC_TOPOLOGY_FLAG_DONT_CHANGE_BINDING
+                |HWLOC_TOPOLOGY_FLAG_NO_DISTANCES
+                |HWLOC_TOPOLOGY_FLAG_NO_MEMATTRS
+                |HWLOC_TOPOLOGY_FLAG_NO_CPUKINDS)) {
     errno = EINVAL;
     return -1;
   }
@@ -4060,14 +4100,10 @@ hwloc_topology_load (struct hwloc_topology *topology)
    */
   hwloc_set_binding_hooks(topology);
 
-  hwloc_pci_discovery_prepare(topology);
-
   /* actual topology discovery */
   err = hwloc_discover(topology, &dstatus);
   if (err < 0)
     goto out;
-
-  hwloc_pci_discovery_exit(topology);
 
 #ifndef HWLOC_DEBUG
   if (getenv("HWLOC_DEBUG_CHECK"))
@@ -4090,6 +4126,7 @@ hwloc_topology_load (struct hwloc_topology *topology)
   /* Same for memattrs */
   hwloc_internal_memattrs_need_refresh(topology);
   hwloc_internal_memattrs_refresh(topology);
+  hwloc_internal_memattrs_guess_memory_tiers(topology);
 
   topology->is_loaded = 1;
 

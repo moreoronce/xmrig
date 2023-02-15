@@ -59,6 +59,7 @@ public:
     static const char *kCoin;
     static const char *kDaemon;
     static const char *kDaemonPollInterval;
+    static const char* kDaemonJobTimeout;
     static const char *kEnabled;
     static const char *kFingerprint;
     static const char *kKeepalive;
@@ -69,20 +70,19 @@ public:
     static const char *kSOCKS5;
     static const char *kSubmitToOrigin;
     static const char *kTls;
-    static const char* kWSS;
     static const char *kUrl;
     static const char *kUser;
     static const char* kSpendSecretKey;
     static const char* kDaemonZMQPort;
-    static const char* kDaemonWSSPort;
     static const char *kNicehashHost;
 
     constexpr static int kKeepAliveTimeout         = 60;
     constexpr static uint16_t kDefaultPort         = 3333;
     constexpr static uint64_t kDefaultPollInterval = 1000;
+    constexpr static uint64_t kDefaultJobTimeout   = 15000;
 
     Pool() = default;
-    Pool(const char *host, uint16_t port, const char *user, const char *password, const char* spendSecretKey, int keepAlive, bool nicehash, bool tls, bool wss, Mode mode);
+    Pool(const char *host, uint16_t port, const char *user, const char *password, const char* spendSecretKey, int keepAlive, bool nicehash, bool tls, Mode mode);
     Pool(const char *url);
     Pool(const rapidjson::Value &object);
 
@@ -95,7 +95,6 @@ public:
 
     inline bool isNicehash() const                      { return m_flags.test(FLAG_NICEHASH); }
     inline bool isTLS() const                           { return m_flags.test(FLAG_TLS) || m_url.isTLS(); }
-    inline bool isWSS() const                           { return m_flags.test(FLAG_WSS) || m_url.isWSS(); }
     inline bool isValid() const                         { return m_url.isValid(); }
     inline const Algorithm &algorithm() const           { return m_algorithm; }
     inline const Coin &coin() const                     { return m_coin; }
@@ -113,6 +112,7 @@ public:
     inline uint16_t port() const                        { return m_url.port(); }
     inline int zmq_port() const                         { return m_zmqPort; }
     inline uint64_t pollInterval() const                { return m_pollInterval; }
+    inline uint64_t jobTimeout() const                  { return m_jobTimeout; }
     inline void setAlgo(const Algorithm &algorithm)     { m_algorithm = algorithm; }
     inline void setUrl(const char *url)                 { m_url = Url(url); }
     inline void setPassword(const String &password)     { m_password = password; }
@@ -138,7 +138,6 @@ private:
         FLAG_ENABLED,
         FLAG_NICEHASH,
         FLAG_TLS,
-        FLAG_WSS,
         FLAG_MAX
     };
 
@@ -160,6 +159,7 @@ private:
     String m_user;
     String m_spendSecretKey;
     uint64_t m_pollInterval         = kDefaultPollInterval;
+    uint64_t m_jobTimeout           = kDefaultJobTimeout;
     Url m_daemon;
     Url m_url;
     int m_zmqPort                   = -1;

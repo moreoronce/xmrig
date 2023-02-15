@@ -33,6 +33,7 @@
 #include "crypto/common/Nonce.h"
 #include "crypto/common/VirtualMemory.h"
 #include "crypto/rx/Rx.h"
+#include "crypto/rx/RxCache.h"
 #include "crypto/rx/RxDataset.h"
 #include "crypto/rx/RxVm.h"
 #include "crypto/ghostrider/ghostrider.h"
@@ -41,11 +42,6 @@
 
 #ifdef XMRIG_ALGO_RANDOMX
 #   include "crypto/randomx/randomx.h"
-#endif
-
-
-#ifdef XMRIG_ALGO_ASTROBWT
-#   include "crypto/astrobwt/AstroBWT.h"
 #endif
 
 
@@ -73,19 +69,20 @@ xmrig::CpuWorker<N>::CpuWorker(size_t id, const CpuLaunchData &data) :
     Worker(id, data.affinity, data.priority),
     m_algorithm(data.algorithm),
     m_assembly(data.assembly),
-    m_astrobwtAVX2(data.astrobwtAVX2),
     m_hwAES(data.hwAES),
     m_yield(data.yield),
     m_av(data.av()),
-    m_astrobwtMaxSize(data.astrobwtMaxSize * 1000),
     m_miner(data.miner),
     m_threads(data.threads),
     m_ctx()
 {
 #   ifdef XMRIG_ALGO_CN_HEAVY
     // cn-heavy optimization for Zen3 CPUs
-    const bool is_vermeer = (Cpu::info()->arch() == ICpuInfo::ARCH_ZEN3) && (Cpu::info()->model() == 0x21);
-    if ((N == 1) && (m_av == CnHash::AV_SINGLE) && (m_algorithm.family() == Algorithm::CN_HEAVY) && (m_assembly != Assembly::NONE) && is_vermeer) {
+    const auto arch = Cpu::info()->arch();
+    const uint32_t model = Cpu::info()->model();
+    const bool is_vermeer = (arch == ICpuInfo::ARCH_ZEN3) && (model == 0x21);
+    const bool is_raphael = (arch == ICpuInfo::ARCH_ZEN4) && (model == 0x61);
+    if ((N == 1) && (m_av == CnHash::AV_SINGLE) && (m_algorithm.family() == Algorithm::CN_HEAVY) && (m_assembly != Assembly::NONE) && (is_vermeer || is_raphael)) {
         std::lock_guard<std::mutex> lock(cn_heavyZen3MemoryMutex);
         if (!cn_heavyZen3Memory) {
             // Round up number of threads to the multiple of 8
@@ -149,6 +146,11 @@ void xmrig::CpuWorker<N>::allocateRandomX_VM()
         uint8_t* scratchpad = m_memory->isHugePages() ? m_memory->scratchpad() : dataset->tryAllocateScrathpad();
         m_vm = RxVm::create(dataset, scratchpad ? scratchpad : m_memory->scratchpad(), !m_hwAES, m_assembly, node());
     }
+    else if (!dataset->get() && (m_job.currentJob().seed() != m_seed)) {
+        // Update RandomX light VM with the new seed
+        randomx_vm_set_cache(m_vm, dataset->cache()->get());
+    }
+    m_seed = m_job.currentJob().seed();
 }
 #endif
 
@@ -221,11 +223,6 @@ bool xmrig::CpuWorker<N>::selfTest()
                verify(Algorithm::AR2_CHUKWA_V2, argon2_chukwa_v2_test_out) &&
                verify(Algorithm::AR2_WRKZ, argon2_wrkz_test_out);
     }
-#   endif
-
-#   ifdef XMRIG_ALGO_ASTROBWT
-    if (m_algorithm.id() == Algorithm::ASTROBWT_DERO)   return verify(Algorithm::ASTROBWT_DERO,   astrobwt_dero_test_out);
-    if (m_algorithm.id() == Algorithm::ASTROBWT_DERO_2) return verify(Algorithm::ASTROBWT_DERO_2, astrobwt_dero_2_test_out);
 #   endif
 
     return false;
@@ -316,21 +313,6 @@ void xmrig::CpuWorker<N>::start()
 #           endif
             {
                 switch (job.algorithm().family()) {
-
-#               ifdef XMRIG_ALGO_ASTROBWT
-                case Algorithm::ASTROBWT:
-                    if (job.algorithm().id() == Algorithm::ASTROBWT_DERO) {
-                        if (!astrobwt::astrobwt_dero(m_job.blob(), job.size(), m_ctx[0]->memory, m_hash, m_astrobwtMaxSize, m_astrobwtAVX2)) {
-                            valid = false;
-                        }
-                    }
-                    else {
-                        if (!astrobwt::astrobwt_dero_v2(m_job.blob(), job.size(), m_ctx[0]->memory, m_hash)) {
-                            valid = false;
-                        }
-                    }
-                    break;
-#               endif
 
 #               ifdef XMRIG_ALGO_GHOSTRIDER
                 case Algorithm::GHOSTRIDER:

